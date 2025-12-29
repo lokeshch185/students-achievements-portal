@@ -1,0 +1,39 @@
+{
+  "name": "student-achievement-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Student Achievement Management System",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "seed": "node scripts/seedData.js"
+  },
+  "keywords": [
+    "backend",
+    "student-achievement",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "express-validator": "^7.0.1",
+    "fs": "^0.0.1-security",
+    "ioredis": "^5.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.6.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "nodemon": "^3.1.4",
+    "path": "^0.12.7",
+    "pdf-lib": "^1.17.1"
+  }
+}
