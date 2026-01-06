@@ -7,6 +7,7 @@ export default function AchievementVerification({ achievements, onUpdate }) {
   const [verifying, setVerifying] = useState(null)
   const [rejecting, setRejecting] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [downloading, setDownloading] = useState(false)
   const [items, setItems] = useState(achievements)
   const [selectedAchievement, setSelectedAchievement] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -548,8 +549,10 @@ export default function AchievementVerification({ achievements, onUpdate }) {
                   {deleting === (selectedAchievement._id || selectedAchievement.id) ? "Deleting..." : "Delete"}
                 </button>
                 <button
+                disabled={downloading}
                   onClick={async () => {
                     try {
+                      setDownloading(true)
                       const token = localStorage.getItem("token")
                       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
                       const id = selectedAchievement._id || selectedAchievement.id
@@ -570,14 +573,16 @@ export default function AchievementVerification({ achievements, onUpdate }) {
                       a.click()
                       a.remove()
                       window.URL.revokeObjectURL(url)
+                      setDownloading(false)
                     } catch (err) {
                       console.error("Error downloading PDF:", err)
                     showError(err, "Failed to download PDF. Please try again.")
+                    setDownloading(false)
                     }
                   }}
-                  className="px-6 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                  className={`px-6 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium ${downloading ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"}`}
                 >
-                  Download PDF
+                  {downloading ? "Downloading..." : "Download PDF"}
                 </button>
               </div>
               <div className="flex gap-3">

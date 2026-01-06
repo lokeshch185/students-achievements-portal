@@ -487,7 +487,7 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
     })
   }
 
-  // Authorization: allow admin; HOD limited to their department; advisor to their divisions
+  // Authorization checks...
   if (req.user.role === "hod") {
     if (
       !achievement.student.department ||
@@ -500,7 +500,7 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
     }
   }
 
-  // Build file URLs (served by /api/files/:id)
+  // Build file URLs
   const baseUrl = `${req.protocol}://${req.get("host")}`
   const certificateUrl = achievement.certificate
     ? `${baseUrl}/api/files/${achievement.certificate._id || achievement.certificate}`
@@ -509,7 +509,6 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
     ? `${baseUrl}/api/files/${achievement.photo._id || achievement.photo}`
     : null
 
-  // Simple HTML template for PDF
   const participants =
     achievement.participants && achievement.participants.length > 0
       ? achievement.participants
@@ -520,6 +519,8 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
       ? achievement.participantCertificates
       : []
 
+  const bannerUrl = `${baseUrl}/public/assets/spit.png`
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -527,19 +528,34 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
         <meta charset="utf-8" />
         <title>Achievement - ${achievement.title}</title>
         <style>
+        
           body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #111827; }
           h1 { font-size: 24px; margin-bottom: 8px; }
           h2 { font-size: 18px; margin-top: 24px; margin-bottom: 8px; }
           p { font-size: 14px; line-height: 1.5; }
+          .banner {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
           .meta { font-size: 12px; color: #4b5563; margin-bottom: 16px; }
-          .section { margin-bottom: 16px; }
+          .section { margin-bottom: 16px; page-break-inside: avoid; }
           .label { font-weight: 600; }
           .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-top: 4px; }
-          img { max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; }
+          img { max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; display: block; }
         </style>
       </head>
       <body>
-        <h1>${achievement.title}</h1>
+      <img
+  src="${bannerUrl}"
+  alt="SPIT Banner"
+  class="banner"
+/>
+
+        <h1>${achivement.type} - ${achievement.title}</h1>
         <div class="meta">
           <div><span class="label">Student:</span> ${achievement.student?.name || ""} (${achievement.student?.rollNo || achievement.student?.email || ""})</div>
           <div><span class="label">Category:</span> ${achievement.category?.name || ""}</div>
@@ -636,19 +652,58 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
 
   try {
     const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: "networkidle0" })
+
+    // Add authentication
+    if (req.headers.authorization) {
+      await page.setExtraHTTPHeaders({
+        'Authorization': req.headers.authorization
+      })
+    }
+
+    // Set content and wait for images to load
+    await page.setContent(html, { waitUntil: "domcontentloaded" })
+    
+    // Wait for all images to load
+    await page.evaluate(() => {
+      return Promise.all(
+        Array.from(document.images).map(img => {
+          if (img.complete) return Promise.resolve()
+          return new Promise((resolve, reject) => {
+            img.addEventListener('load', resolve)
+            img.addEventListener('error', reject)
+            setTimeout(resolve, 10000) // Timeout after 10 seconds
+          })
+        })
+      )
+    })
+
+    // Generate PDF
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       margin: { top: "20mm", bottom: "20mm", left: "15mm", right: "15mm" },
+      preferCSSPageSize: false,
     })
 
+    // Close browser before sending response
+    await browser.close()
+
+    // Send PDF with correct headers
     const safeTitle = achievement.title.replace(/[^a-z0-9]+/gi, "_").toLowerCase()
     res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Length", pdfBuffer.length)
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle || "achievement"}.pdf"`)
-    res.send(pdfBuffer)
-  } finally {
+    
+    // Send as buffer, not string
+    return res.end(pdfBuffer, 'binary')
+    
+  } catch (error) {
     await browser.close()
+    console.error('PDF generation error:', error)
+    return res.status(500).json({
+      success: false,
+      error: "Failed to generate PDF"
+    })
   }
 })
 
