@@ -60,5 +60,6 @@ exports.uploadPhoto = upload.single("photo")
 exports.uploadFiles = upload.fields([
   { name: "certificate", maxCount: 1 },
   { name: "photo", maxCount: 1 },
+  { name: "participantCertificates", maxCount: 5 },
 ])
 

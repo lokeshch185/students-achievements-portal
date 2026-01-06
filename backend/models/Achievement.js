@@ -73,6 +73,22 @@ const achievementSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Optional per-participant certificates (one per student)
+    participantCertificates: [
+      {
+        student: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        certificate: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "File",
+          required: true,
+        },
+      },
+    ],
+
     academicYear: {
       type: String, // e.g., "2024-2025"
       trim: true,
@@ -120,6 +136,44 @@ achievementSchema.add({
       name: String,
     },
   },
+  participantSnapshots: [
+    {
+      student: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      snapshot: {
+        rollNo: String,
+        name: String,
+        department: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          code: String,
+        },
+        program: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          code: String,
+        },
+        year: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          code: String,
+          academicYear: String,
+          semester: Number,
+        },
+        division: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+          code: String,
+        },
+        batch: {
+          id: mongoose.Schema.Types.ObjectId,
+          name: String,
+        },
+      },
+    },
+  ],
 })
 
 // When an achievement is approved, capture the student's academic snapshot
@@ -166,6 +220,56 @@ achievementSchema.pre("save", async function (next) {
         ? { id: division._id, name: division.name, code: division.code }
         : null,
       batch: batch ? { id: batch._id, name: batch.name } : null,
+    }
+
+    // Capture snapshots for participants as well
+    if (Array.isArray(this.participants) && this.participants.length > 0) {
+      const participantUsers = await User.find({ _id: { $in: this.participants } })
+        .select("name rollNo department program year division batch")
+        .lean()
+
+      const participantSnapshots = []
+
+      for (const p of participantUsers) {
+        const [pDept, pProg, pYear, pDiv, pBatch] = await Promise.all([
+          p.department ? Department.findById(p.department).lean() : null,
+          p.program ? Program.findById(p.program).lean() : null,
+          p.year ? Year.findById(p.year).lean() : null,
+          p.division ? Division.findById(p.division).lean() : null,
+          p.batch ? Batch.findById(p.batch).lean() : null,
+        ])
+
+        participantSnapshots.push({
+          student: p._id,
+          snapshot: {
+            rollNo: p.rollNo || null,
+            name: p.name || null,
+            department: pDept
+              ? { id: pDept._id, name: pDept.name, code: pDept.code }
+              : null,
+            program: pProg
+              ? { id: pProg._id, name: pProg.name, code: pProg.code }
+              : null,
+            year: pYear
+              ? {
+                  id: pYear._id,
+                  name: pYear.name,
+                  code: pYear.code,
+                  academicYear: pYear.academicYear || null,
+                  semester: pYear.semester || null,
+                }
+              : null,
+            division: pDiv
+              ? { id: pDiv._id, name: pDiv.name, code: pDiv.code }
+              : null,
+            batch: pBatch ? { id: pBatch._id, name: pBatch.name } : null,
+          },
+        })
+      }
+
+      this.participantSnapshots = participantSnapshots
+    } else {
+      this.participantSnapshots = []
     }
 
     next()

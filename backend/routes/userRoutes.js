@@ -7,6 +7,7 @@ const {
   updateUser,
   deleteUser,
   assignAdvisor,
+  searchStudents,
 } = require("../controllers/userController")
 const { protect } = require("../middleware/auth")
 const { authorize } = require("../middleware/authorize")
@@ -33,6 +34,9 @@ const csvUpload = multer({
 })
 
 const { bulkCreateStudents } = require("../controllers/userController")
+
+// Lightweight student search (for participant picker)
+router.get("/students/search", protect, searchStudents)
 
 router.route("/").get(protect, authorize("admin"), getUsers).post(protect, authorize("admin"), createUser)
 router.post(

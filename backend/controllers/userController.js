@@ -39,7 +39,7 @@ exports.getUsers = asyncHandler(async (req, res) => {
     .limit(limitNum)
 
   const total = await User.countDocuments(query)
-
+  console.log("users", users)
   res.status(200).json({
     success: true,
     pagination: {
@@ -52,10 +52,46 @@ exports.getUsers = asyncHandler(async (req, res) => {
   })
 })
 
+// @desc    Lightweight student search for participant selection
+// @route   GET /api/users/students/search
+// @access  Private
+exports.searchStudents = asyncHandler(async (req, res) => {
+  const { q, limit = 10 } = req.query
+
+  if (!q || !q.trim()) {
+    return res.status(200).json({
+      success: true,
+      data: [],
+    })
+  }
+
+  const limitNum = Math.min(parseInt(limit, 10) || 10, 50)
+
+  const students = await User.find({
+    role: "student",
+    isActive: true,
+    $or: [
+      { name: { $regex: q, $options: "i" } },
+      { email: { $regex: q, $options: "i" } },
+    ],
+  })
+    .select("name email") // _id is included by default
+    .sort({ name: 1 })
+    .limit(limitNum)
+
+  res.status(200).json({
+    success: true,
+    data: students,
+  })
+})
+
+
+
 // @desc    Get single user
 // @route   GET /api/users/:id
 // @access  Private
 exports.getUser = asyncHandler(async (req, res) => {
+  console.log("user")
   const user = await User.findById(req.params.id)
     .select("-password")
     .populate("department program year division batch")

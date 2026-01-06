@@ -1,4 +1,5 @@
 import axios from "axios"
+import { showError } from "../utils/toast"
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000") + "/api"
 
@@ -30,6 +31,7 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Unauthorized - clear token and redirect to login
+      showError(error.response?.data?.error || "Unauthorized")
       localStorage.removeItem("token")
       localStorage.removeItem("user")
       window.location.href = "/login"
@@ -269,6 +271,12 @@ export const achievementAPI = {
     if (files?.photo) {
       formData.append("photo", files.photo)
     }
+    if (files?.participantCertificates) {
+      const entries = Object.entries(files.participantCertificates).filter(([, file]) => file)
+      const map = entries.map(([studentId]) => studentId)
+      entries.forEach(([, file]) => formData.append("participantCertificates", file))
+      formData.append("participantCertificateMap", JSON.stringify(map))
+    }
 
     const response = await apiClient.post("/achievements", formData, {
       headers: {
@@ -292,6 +300,12 @@ export const achievementAPI = {
     }
     if (files?.photo) {
       formData.append("photo", files.photo)
+    }
+    if (files?.participantCertificates) {
+      const entries = Object.entries(files.participantCertificates).filter(([, file]) => file)
+      const map = entries.map(([studentId]) => studentId)
+      entries.forEach(([, file]) => formData.append("participantCertificates", file))
+      formData.append("participantCertificateMap", JSON.stringify(map))
     }
 
     const response = await apiClient.put(`/achievements/${id}`, formData, {
@@ -322,6 +336,13 @@ export const userAPI = {
   getUsers: async (filters = {}) => {
     const response = await apiClient.get("/users", { params: filters })
     return response
+  },
+
+  searchStudents: async (query, limit = 10) => {
+    const response = await apiClient.get("/users/students/search", {
+      params: { q: query, limit },
+    })
+    return response.data || []
   },
 
   bulkCreateStudents: async (file) => {

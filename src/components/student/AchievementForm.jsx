@@ -1,8 +1,9 @@
 
 
 import { useState, useEffect } from "react"
-import { categoryAPI, userAPI } from "../../services/api"
+import { categoryAPI, userAPI, fileAPI } from "../../services/api"
 import { useAuth } from "../../context/AuthContext"
+import { useDebounce } from "../../hooks/useDebounce"
 import { showWarning } from "../../utils/toast"
 
 export default function AchievementForm({ onSubmit, achievement = null, onCancel }) {
@@ -27,6 +28,10 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
   const [studentSearch, setStudentSearch] = useState("")
   const [searchResults, setSearchResults] = useState([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const debouncedSearch = useDebounce(studentSearch, 400)
+  const [participantFiles, setParticipantFiles] = useState({})
+
+  const MAX_TEAM_SIZE = 5 // including the creator
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -125,36 +130,81 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
     return true
   }
 
-  const handleSearchStudents = async (query) => {
+  // Debounced student search (name/email only, minimal payload)
+  useEffect(() => {
+    const runSearch = async () => {
+      const query = debouncedSearch.trim()
+      if (!query) {
+        setSearchResults([])
+        return
+      }
+      setSearchLoading(true)
+      try {
+        const results = await userAPI.searchStudents(query, 10)
+        // Exclude current user
+        const filtered = results.filter((u) => u._id !== user?._id)
+        setSearchResults(filtered)
+      } catch (err) {
+        console.error("Error searching students:", err)
+      } finally {
+        setSearchLoading(false)
+      }
+    }
+
+    runSearch()
+  }, [debouncedSearch, user?._id])
+
+  const handleSearchStudents = (query) => {
     setStudentSearch(query)
-    if (!query.trim()) {
-      setSearchResults([])
+  }
+
+  const handleParticipantFileChange = (studentId, file) => {
+    if (!file) {
+      setParticipantFiles((prev) => {
+        const updated = { ...prev }
+        delete updated[studentId]
+        return updated
+      })
       return
     }
-    setSearchLoading(true)
-    try {
-      const params = {
-        role: "student",
-        search: query,
-      }
-      // Prefer same department/year/division as current student
-      if (user?.department?._id) params.department = user.department._id
-      if (user?.year?._id) params.year = user.year._id
-      if (user?.division?._id) params.division = user.division._id
+    const maxSize = 500 * 1024
+    if (file.size > maxSize) {
+      showWarning("Participant certificate must be under 500 KB")
+      return
+    }
+    setParticipantFiles((prev) => ({
+      ...prev,
+      [studentId]: file,
+    }))
+  }
 
-      const response = await userAPI.getUsers(params)
-      const data = response.data || []
-      // Exclude current user
-      const filtered = data.filter((u) => u._id !== user?._id)
-      setSearchResults(filtered)
+  const viewExistingFile = async (fileId) => {
+    if (!fileId) return
+    try {
+      const token = localStorage.getItem("token")
+      const url = fileAPI.getFileUrl(fileId)
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error("Failed to fetch file")
+      }
+      const blob = await response.blob()
+      const objectUrl = window.URL.createObjectURL(blob)
+      window.open(objectUrl, "_blank")
     } catch (err) {
-      console.error("Error searching students:", err)
-    } finally {
-      setSearchLoading(false)
+      console.error("Error viewing file:", err)
     }
   }
 
   const handleAddParticipant = (student) => {
+    const currentCount = (formData.participants?.length || 0) + 1 // + creator
+    if (currentCount >= MAX_TEAM_SIZE) {
+      showWarning(`Team size cannot exceed ${MAX_TEAM_SIZE} including you`)
+      return
+    }
     setFormData((prev) => {
       const exists = prev.participants?.some((p) => (p._id || p.id) === (student._id || student.id))
       if (exists) return prev
@@ -170,6 +220,11 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
       ...prev,
       participants: (prev.participants || []).filter((p) => (p._id || p.id) !== id),
     }))
+    setParticipantFiles((prev) => {
+      const updated = { ...prev }
+      delete updated[id]
+      return updated
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -188,6 +243,9 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
       }
       if (formData.photo) {
         files.photo = formData.photo
+      }
+      if (Object.keys(participantFiles).length) {
+        files.participantCertificates = participantFiles
       }
 
       // Prepare achievement data
@@ -215,6 +273,7 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
         })
         setCertificatePreview(null)
         setPhotoPreview(null)
+        setParticipantFiles({})
       }
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
@@ -375,22 +434,42 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
           )}
 
           {formData.participants && formData.participants.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {formData.participants.map((p) => (
-                <span
-                  key={p._id || p.id}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 text-gray-800 text-xs border border-gray-300"
-                >
-                  <span>{p.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveParticipant(p._id || p.id)}
-                    className="text-gray-500 hover:text-black"
+            <div className="flex flex-col gap-3 mt-2">
+              {formData.participants.map((p) => {
+                const pid = p._id || p.id
+                const existingFile = participantFiles[pid]
+                return (
+                  <div
+                    key={pid}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-gray-200 bg-gray-50"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    <div className="flex-1 text-sm text-gray-900">
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-gray-600 text-xs">{p.rollNo || p.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => handleParticipantFileChange(pid, e.target.files?.[0])}
+                        className="text-xs"
+                      />
+                      {existingFile && <span className="text-xs text-gray-600 truncate max-w-[120px]">{existingFile.name}</span>}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveParticipant(pid)}
+                        className="text-gray-500 hover:text-black text-sm"
+                        aria-label={`Remove ${p.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              <p className="text-xs text-gray-500">
+                Team size max {MAX_TEAM_SIZE} (including you). Certificates are optional but can be added per member.
+              </p>
             </div>
           )}
         </div>
@@ -415,8 +494,17 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
         {formData.certificate && !certificatePreview && (
           <p className="text-sm text-gray-600 mt-1">File: {formData.certificate.name}</p>
         )}
-        {isEditing && achievement.certificate && !formData.certificate && (
-          <p className="text-sm text-gray-500 mt-1">Current certificate will be kept if no new file is selected</p>
+        {isEditing && achievement.certificate && !formData.certificate && !certificatePreview && (
+          <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+            <span>Existing certificate attached.</span>
+            <button
+              type="button"
+              onClick={() => viewExistingFile(achievement.certificate._id || achievement.certificate)}
+              className="text-blue-600 hover:underline"
+            >
+              View
+            </button>
+          </div>
         )}
       </div>
 
@@ -436,8 +524,17 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
             <img src={photoPreview} alt="Photo preview" className="max-w-xs rounded-lg border border-gray-300" />
           </div>
         )}
-        {isEditing && achievement.photo && !formData.photo && (
-          <p className="text-sm text-gray-500 mt-1">Current photo will be kept if no new file is selected</p>
+        {isEditing && achievement.photo && !formData.photo && !photoPreview && (
+          <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+            <span>Existing photo attached.</span>
+            <button
+              type="button"
+              onClick={() => viewExistingFile(achievement.photo._id || achievement.photo)}
+              className="text-blue-600 hover:underline"
+            >
+              View
+            </button>
+          </div>
         )}
       </div>
 

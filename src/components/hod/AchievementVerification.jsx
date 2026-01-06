@@ -337,13 +337,49 @@ export default function AchievementVerification({ achievements, onUpdate }) {
                 {selectedAchievement.student && (
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-2">Student Information</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-1">
                       <p className="text-gray-900 font-medium">
-                        {selectedAchievement.student.name || selectedAchievement.student.email}
+                        {selectedAchievement.student.name || null}
                       </p>
+                      <p className="text-gray-600 text-sm">Email: {selectedAchievement.student.email || null}</p>
                       {selectedAchievement.student.rollNo && (
-                        <p className="text-gray-600 text-sm mt-1">Roll No: {selectedAchievement.student.rollNo}</p>
+                        <p className="text-gray-600 text-sm">Roll No: {selectedAchievement.student.rollNo || null}</p>
                       )}
+                      {(selectedAchievement.student.year || selectedAchievement.student.division) && (
+                        <p className="text-gray-600 text-xs">
+                          {selectedAchievement.student.year &&
+                            `Year: ${
+                              selectedAchievement.student.year.name || null
+                            }`}
+                          {selectedAchievement.student.division &&
+                            ` • Division: ${
+                              selectedAchievement.student.division.name || null
+                            }`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Solo / Group Type */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Achievement Type</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <p className="text-gray-900 capitalize">{selectedAchievement.type || "solo"}</p>
+                  </div>
+                </div>
+
+                {/* Group Members */}
+                {selectedAchievement.participants && selectedAchievement.participants.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Group Members</h3>
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
+                      {selectedAchievement.participants.map((p) => (
+                        <div key={p._id || p.id} className="text-sm text-gray-900">
+                          <span className="font-medium">{p.name || p.email}</span>
+                          {p.rollNo && <span className="text-gray-600 text-xs"> • {p.rollNo}</span>}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -356,8 +392,8 @@ export default function AchievementVerification({ achievements, onUpdate }) {
                   </div>
                 </div>
 
-                {/* Category & Date */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Category & Date & Academic Year */}
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-2">Category</h3>
                     <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -378,7 +414,44 @@ export default function AchievementVerification({ achievements, onUpdate }) {
                       </p>
                     </div>
                   </div>
+                  <div>
+                   
+                  </div>
                 </div>
+
+                {/* Per-participant Certificates */}
+                {selectedAchievement.participantCertificates &&
+                  selectedAchievement.participantCertificates.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Member Certificates</h3>
+                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-2">
+                        {selectedAchievement.participantCertificates.map((pc, idx) => (
+                          <div
+                            key={pc._id || `${pc.student?._id || pc.student}-${pc.certificate?._id || pc.certificate}-${idx}`}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <div className="text-gray-900">
+                              <span className="font-medium">
+                                {pc.student?.name || pc.student?.email || "Student"}
+                              </span>
+                              {pc.student?.rollNo && (
+                                <span className="text-gray-600 text-xs"> • {pc.student.rollNo}</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleViewCertificate(pc.certificate?._id || pc.certificate)
+                              }
+                              className="px-3 py-1 bg-black text-white rounded-lg text-xs hover:bg-gray-800 transition"
+                            >
+                              View Certificate
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Certificate */}
                 {selectedAchievement.certificate && (

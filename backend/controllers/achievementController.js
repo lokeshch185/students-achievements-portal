@@ -84,6 +84,7 @@ exports.getAchievements = asyncHandler(async (req, res) => {
   // Execute query
   const achievements = await Achievement.find(query)
     .populate("student", "name rollNo email")
+    .populate("participants", "name rollNo email")
     .populate("category", "name code")
     .populate("verifiedBy", "name email")
     .populate("certificate photo")
@@ -110,11 +111,21 @@ exports.getAchievements = asyncHandler(async (req, res) => {
 // @access  Private
 exports.getAchievement = asyncHandler(async (req, res) => {
   const achievement = await Achievement.findById(req.params.id)
-    .populate("student", "name rollNo email department program year division batch")
+  .populate({
+    path: "student",
+    select: "name rollNo email department program year division batch",
+    populate: [
+      { path: "year", select: "name" },
+      { path: "division", select: "name" },
+      { path: "batch", select: "name" }
+    ]
+  })  
     .populate("participants", "name rollNo email")
     .populate("category", "name code")
     .populate("verifiedBy", "name email")
     .populate("certificate photo")
+    .populate("participantCertificates.student", "name rollNo email")
+    .populate("participantCertificates.certificate")
 
   if (!achievement) {
     return res.status(404).json({
@@ -152,6 +163,7 @@ exports.createAchievement = asyncHandler(async (req, res) => {
   // Handle file uploads
   let certificateFile = null
   let photoFile = null
+  const participantCertificates = []
 
   if (req.files?.certificate) {
     const file = req.files.certificate[0]
@@ -179,6 +191,33 @@ exports.createAchievement = asyncHandler(async (req, res) => {
     })
   }
 
+  // Per-participant certificates (order matches participantCertificateMap)
+  if (req.files?.participantCertificates && req.body.participantCertificateMap) {
+    try {
+      const map = JSON.parse(req.body.participantCertificateMap)
+      for (let i = 0; i < req.files.participantCertificates.length; i++) {
+        const file = req.files.participantCertificates[i]
+        const studentId = map[i]
+        if (!studentId) continue
+        const certFile = await File.create({
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          path: file.path,
+          uploadedBy: req.user._id,
+          fileType: "certificate",
+        })
+        participantCertificates.push({ student: studentId, certificate: certFile._id })
+      }
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid participant certificate map",
+      })
+    }
+  }
+
   // Normalise participants to array of ObjectId strings
   let participantIds = []
   if (Array.isArray(participants)) {
@@ -192,32 +231,34 @@ exports.createAchievement = asyncHandler(async (req, res) => {
   const membersSet = new Set([req.user._id.toString(), ...participantIds.map((id) => id.toString())])
   const memberIds = Array.from(membersSet)
 
-  // Create one achievement document per member so it appears in each student's list
-  const createdAchievements = []
-
-  for (const memberId of memberIds) {
-    const achievement = await Achievement.create({
-      student: memberId,
-      type: memberIds.length > 1 ? "group" : "solo",
-      participants: memberIds,
-      title,
-      category,
-      description,
-      date,
-      certificate: certificateFile?._id,
-      photo: photoFile?._id,
-      academicYear,
-      semester,
+  // Team size validation: max 5 including creator
+  if (memberIds.length > 5) {
+    return res.status(400).json({
+      success: false,
+      error: "Team size cannot exceed 5 members",
     })
-    createdAchievements.push(achievement)
   }
 
-  // Return the creator's achievement (first element corresponds to req.user._id)
-  const creatorAchievement = createdAchievements.find(
-    (a) => a.student.toString() === req.user._id.toString()
-  ) || createdAchievements[0]
+  // Create single achievement document (shared across group)
+  // Note: participants field should NOT include the uploading student
+  const participantsField = memberIds.filter((id) => id !== req.user._id.toString())
 
-  const populatedAchievement = await Achievement.findById(creatorAchievement._id)
+  const achievementDoc = await Achievement.create({
+    student: req.user._id,
+    type: memberIds.length > 1 ? "group" : "solo",
+    participants: participantsField,
+    title,
+    category,
+    description,
+    date,
+    certificate: certificateFile?._id,
+    photo: photoFile?._id,
+    participantCertificates,
+    academicYear,
+    semester,
+  })
+
+  const populatedAchievement = await Achievement.findById(achievementDoc._id)
     .populate("student", "name rollNo email")
     .populate("participants", "name rollNo email")
     .populate("category", "name code")
@@ -311,6 +352,49 @@ exports.updateAchievement = asyncHandler(async (req, res) => {
     req.body.photo = photoFile._id
   }
 
+  // Per-participant certificates on update (replace if provided)
+  if (req.files?.participantCertificates && req.body.participantCertificateMap) {
+    try {
+      const map = JSON.parse(req.body.participantCertificateMap)
+      const participantCertificates = []
+      // Optionally clean up old participant certificates files
+      if (achievement.participantCertificates?.length) {
+        const fs = require("fs")
+        for (const pc of achievement.participantCertificates) {
+          const oldFile = await File.findById(pc.certificate)
+          if (oldFile) {
+            if (fs.existsSync(oldFile.path)) {
+              fs.unlinkSync(oldFile.path)
+            }
+            await File.findByIdAndDelete(oldFile._id)
+          }
+        }
+      }
+
+      for (let i = 0; i < req.files.participantCertificates.length; i++) {
+        const file = req.files.participantCertificates[i]
+        const studentId = map[i]
+        if (!studentId) continue
+        const certFile = await File.create({
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          path: file.path,
+          uploadedBy: req.user._id,
+          fileType: "certificate",
+        })
+        participantCertificates.push({ student: studentId, certificate: certFile._id })
+      }
+      req.body.participantCertificates = participantCertificates
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid participant certificate map",
+      })
+    }
+  }
+
   achievement = await Achievement.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
@@ -393,6 +477,8 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
     .populate("participants", "name rollNo email")
     .populate("category", "name code")
     .populate("certificate photo")
+    .populate("participantCertificates.student", "name rollNo email")
+    .populate("participantCertificates.certificate")
 
   if (!achievement) {
     return res.status(404).json({
@@ -416,13 +502,22 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
 
   // Build file URLs (served by /api/files/:id)
   const baseUrl = `${req.protocol}://${req.get("host")}`
-  const certificateUrl = achievement.certificate ? `${baseUrl}/api/files/${achievement.certificate._id || achievement.certificate}` : null
-  const photoUrl = achievement.photo ? `${baseUrl}/api/files/${achievement.photo._id || achievement.photo}` : null
+  const certificateUrl = achievement.certificate
+    ? `${baseUrl}/api/files/${achievement.certificate._id || achievement.certificate}`
+    : null
+  const photoUrl = achievement.photo
+    ? `${baseUrl}/api/files/${achievement.photo._id || achievement.photo}`
+    : null
 
   // Simple HTML template for PDF
   const participants =
     achievement.participants && achievement.participants.length > 0
       ? achievement.participants
+      : []
+
+  const memberCertificates =
+    achievement.participantCertificates && achievement.participantCertificates.length > 0
+      ? achievement.participantCertificates
       : []
 
   const html = `
@@ -448,7 +543,15 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
         <div class="meta">
           <div><span class="label">Student:</span> ${achievement.student?.name || ""} (${achievement.student?.rollNo || achievement.student?.email || ""})</div>
           <div><span class="label">Category:</span> ${achievement.category?.name || ""}</div>
+          <div><span class="label">Type:</span> ${(achievement.type || "solo").toUpperCase()}</div>
           <div><span class="label">Date:</span> ${new Date(achievement.date).toLocaleDateString()}</div>
+          ${
+            achievement.academicYear || achievement.semester
+              ? `<div><span class="label">Academic Term:</span> ${
+                  achievement.academicYear || ""
+                } ${achievement.semester ? `(Sem ${achievement.semester})` : ""}</div>`
+              : ""
+          }
         </div>
 
         ${
@@ -491,6 +594,33 @@ exports.downloadAchievementPdf = asyncHandler(async (req, res) => {
                 <h2>Photo</h2>
                 <div class="card">
                   <img src="${photoUrl}" alt="Achievement Photo" />
+                </div>
+              </div>`
+            : ""
+        }
+
+        ${
+          memberCertificates.length
+            ? `<div class="section">
+                <h2>Member Certificates</h2>
+                <div class="card">
+                  ${memberCertificates
+                    .map((pc) => {
+                      const student = pc.student || {}
+                      const name = student.name || student.email || "Student"
+                      const roll = student.rollNo ? ` (${student.rollNo})` : ""
+                      const certId = pc.certificate?._id || pc.certificate
+                      const certUrl = certId ? `${baseUrl}/api/files/${certId}` : ""
+                      return `<div style="margin-bottom:8px;">
+                        <div><strong>${name}${roll}</strong></div>
+                        ${
+                          certUrl
+                            ? `<img src="${certUrl}" alt="Member Certificate" style="max-width:100%;max-height:300px;margin-top:4px;" />`
+                            : ""
+                        }
+                      </div>`
+                    })
+                    .join("")}
                 </div>
               </div>`
             : ""
