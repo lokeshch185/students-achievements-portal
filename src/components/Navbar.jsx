@@ -21,7 +21,7 @@ export default function Navbar() {
           <div className="flex items-center gap-3">
             <img src={logo} alt="SPIT Logo" className="w-14 m-2 h-auto" />  
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Students' Achievements Portal</h1>
+          <h1 className="text-3xl font-bold text-gray-900">SPIT | Students' Achievements Portal</h1>
 
           <div className="flex justify-end items-center gap-4">
               <div className="flex items-center gap-2">

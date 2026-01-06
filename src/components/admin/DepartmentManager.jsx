@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { departmentAPI } from "../../services/api"
+import { showError, showSuccess } from "../../utils/toast"
 
 export default function DepartmentManager() {
   const [departments, setDepartments] = useState([])
@@ -31,8 +32,10 @@ export default function DepartmentManager() {
     try {
       if (editingId) {
         await departmentAPI.updateDepartment(editingId, formData)
+        showSuccess("Department updated successfully")
       } else {
         await departmentAPI.createDepartment(formData)
+        showSuccess("Department created successfully")
       }
       setFormData({ code: "", name: "" })
       setShowForm(false)
@@ -40,7 +43,7 @@ export default function DepartmentManager() {
       await fetchDepartments()
     } catch (error) {
       console.error("Error saving department:", error)
-      alert(error.error || "Failed to save department")
+      showError(error, "Failed to save department")
     }
   }
 
@@ -57,9 +60,10 @@ export default function DepartmentManager() {
     try {
       await departmentAPI.deleteDepartment(id)
       await fetchDepartments()
+      showSuccess("Department deleted successfully")
     } catch (error) {
       console.error("Error deleting department:", error)
-      alert(error.error || "Failed to delete department")
+      showError(error, "Failed to delete department")
     }
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { userAPI, departmentAPI, programAPI, academicAPI } from "../../services/api"
+import { showError, showSuccess, showWarning } from "../../utils/toast"
 import AdvancedPagination from "../AdvancedPagination"
 
 export default function UserManager() {
@@ -10,6 +11,7 @@ export default function UserManager() {
   const [divisions, setDivisions] = useState([])
   const [batches, setBatches] = useState([])
   const [showForm, setShowForm] = useState(false)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
@@ -164,7 +166,7 @@ export default function UserManager() {
       
       // Validate password for new users
       if (!editingId && !submitData.password) {
-        alert("Password is required for new users")
+        showWarning("Password is required for new users")
         return
       }
 
@@ -192,14 +194,40 @@ export default function UserManager() {
 
       if (editingId) {
         await userAPI.updateUser(editingId, submitData)
+        showSuccess("User updated successfully")
       } else {
         await userAPI.createUser(submitData)
+        showSuccess("User created successfully")
       }
       resetForm()
       await fetchUsers()
     } catch (error) {
       console.error("Error saving user:", error)
-      alert(error.error || error.message || "Failed to save user")
+      showError(error, "Failed to save user")
+    }
+  }
+
+  const handleBulkUpload = async (e) => {
+    e.preventDefault()
+    const fileInput = e.target.elements.csvFile
+    if (!fileInput.files || !fileInput.files[0]) {
+      showWarning("Please select a CSV file")
+      return
+    }
+    const file = fileInput.files[0]
+    try {
+      const response = await userAPI.bulkCreateStudents(file)
+      const payload = response.data || response
+      const summary = payload.data || payload
+      showSuccess(
+        `Bulk upload complete. Total: ${summary.total} | Success: ${summary.successCount} | Failed: ${summary.failureCount}`
+      )
+      fileInput.value = ""
+      setShowBulkUpload(false)
+      await fetchUsers()
+    } catch (error) {
+      console.error("Error uploading CSV:", error)
+      showError(error, "Failed to upload CSV")
     }
   }
 
@@ -237,7 +265,7 @@ export default function UserManager() {
       await fetchUsers()
     } catch (error) {
       console.error("Error deleting user:", error)
-      alert(error.error || "Failed to delete user")
+      showError(error, "Failed to delete user")
     }
   }
 
@@ -285,10 +313,55 @@ export default function UserManager() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-900">Users</h2>
-        <button onClick={() => setShowForm(true)} className="btn-primary">
-          + Add User
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowBulkUpload(true)}
+            className="btn-secondary"
+          >
+            Bulk Upload Students (CSV)
+          </button>
+          <button onClick={() => setShowForm(true)} className="btn-primary">
+            + Add User
+          </button>
+        </div>
       </div>
+
+      {/* Bulk upload panel */}
+      {showBulkUpload && (
+        <div className="card p-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold text-gray-900 text-sm">
+              Bulk Student Upload (CSV)
+            </h3>
+            <button
+              onClick={() => setShowBulkUpload(false)}
+              className="text-xs text-gray-500 hover:text-gray-800"
+            >
+              Close
+            </button>
+          </div>
+          <p className="text-xs text-gray-600">
+            CSV columns:&nbsp;
+            <span className="font-mono">
+              name, email, password, rollNo, departmentCode, programCode, yearCode, divisionCode, batchCode
+            </span>
+          </p>
+          <form onSubmit={handleBulkUpload} className="flex flex-col sm:flex-row gap-3 items-start">
+            <input
+              type="file"
+              name="csvFile"
+              accept=".csv"
+              className="input-base"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+            >
+              Upload
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card p-4 space-y-3">

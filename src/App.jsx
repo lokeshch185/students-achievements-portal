@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom"
+import { ToastContainer } from "react-toastify"
 import { useAuth } from "./context/AuthContext"
 import Login from "./pages/Login"
 import AdminDashboard from "./pages/AdminDashboard"
@@ -24,6 +25,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ToastContainer />
       <Routes>
         <Route
           path="/login"

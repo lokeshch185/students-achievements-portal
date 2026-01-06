@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { categoryAPI } from "../../services/api"
+import { showError, showSuccess } from "../../utils/toast"
 
 export default function CategoryManager() {
   const [categories, setCategories] = useState([])
@@ -32,9 +33,10 @@ export default function CategoryManager() {
       setFormData({ code: "", name: "" })
       setShowForm(false)
       await fetchCategories()
+      showSuccess("Category created successfully")
     } catch (error) {
       console.error("Error creating category:", error)
-      alert(error.error || "Failed to create category")
+      showError(error, "Failed to create category")
     }
   }
 

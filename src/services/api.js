@@ -324,6 +324,17 @@ export const userAPI = {
     return response
   },
 
+  bulkCreateStudents: async (file) => {
+    const formData = new FormData()
+    formData.append("file", file)
+    const response = await apiClient.post("/users/bulk", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    })
+    return response
+  },
+
   getUser: async (id) => {
     const response = await apiClient.get(`/users/${id}`)
     return response.data

@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react"
 import { achievementAPI } from "../../services/api"
+import { showError, showSuccess, showWarning } from "../../utils/toast"
 
 export default function AchievementVerification({ achievements, onUpdate }) {
   const [verifying, setVerifying] = useState(null)
@@ -33,9 +34,10 @@ export default function AchievementVerification({ achievements, onUpdate }) {
       if (onUpdate) {
         onUpdate()
       }
+      showSuccess("Achievement verified")
     } catch (error) {
       console.error("Error verifying achievement:", error)
-      alert(error.error || "Failed to verify achievement")
+      showError(error, "Failed to verify achievement")
     } finally {
       setVerifying(null)
     }
@@ -43,7 +45,7 @@ export default function AchievementVerification({ achievements, onUpdate }) {
 
   const handleReject = async (id) => {
     if (!rejectionReason.trim()) {
-      alert("Please provide a rejection reason")
+      showWarning("Please provide a rejection reason")
       return
     }
     setRejecting(id)
@@ -61,9 +63,10 @@ export default function AchievementVerification({ achievements, onUpdate }) {
       if (onUpdate) {
         onUpdate()
       }
+      showSuccess("Achievement rejected")
     } catch (error) {
       console.error("Error rejecting achievement:", error)
-      alert(error.error || "Failed to reject achievement")
+      showError(error, "Failed to reject achievement")
     } finally {
       setRejecting(null)
     }
@@ -127,7 +130,7 @@ export default function AchievementVerification({ achievements, onUpdate }) {
       window.open(objectUrl, "_blank")
     } catch (err) {
       console.error("Error viewing certificate:", err)
-      alert("Failed to view certificate. Please try again.")
+      showError(err, "Failed to view certificate. Please try again.")
     }
   }
 
@@ -150,7 +153,7 @@ export default function AchievementVerification({ achievements, onUpdate }) {
       window.open(objectUrl, "_blank")
     } catch (err) {
       console.error("Error viewing photo:", err)
-      alert("Failed to view photo. Please try again.")
+      showError(err, "Failed to view photo. Please try again.")
     }
   }
 
@@ -173,7 +176,7 @@ export default function AchievementVerification({ achievements, onUpdate }) {
       }
     } catch (error) {
       console.error("Error deleting achievement:", error)
-      alert(error.error || "Failed to delete achievement")
+      showError(error, "Failed to delete achievement")
     } finally {
       setDeleting(null)
     }
@@ -462,14 +465,48 @@ export default function AchievementVerification({ achievements, onUpdate }) {
             </div>
 
             {/* Footer with Actions */}
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-between">
-              <button
-                onClick={() => handleDelete(selectedAchievement._id || selectedAchievement.id)}
-                disabled={deleting === (selectedAchievement._id || selectedAchievement.id)}
-                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 font-medium"
-              >
-                {deleting === (selectedAchievement._id || selectedAchievement.id) ? "Deleting..." : "Delete"}
-              </button>
+            <div className="p-6 border-t border-gray-200 flex flex-wrap gap-3 justify-between">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleDelete(selectedAchievement._id || selectedAchievement.id)}
+                  disabled={deleting === (selectedAchievement._id || selectedAchievement.id)}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 font-medium"
+                >
+                  {deleting === (selectedAchievement._id || selectedAchievement.id) ? "Deleting..." : "Delete"}
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("token")
+                      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000"
+                      const id = selectedAchievement._id || selectedAchievement.id
+                      const response = await fetch(`${API_URL}/api/achievements/${id}/pdf`, {
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      })
+                      if (!response.ok) {
+                        throw new Error("Failed to generate PDF")
+                      }
+                      const blob = await response.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `${selectedAchievement.title || "achievement"}.pdf`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                      window.URL.revokeObjectURL(url)
+                    } catch (err) {
+                      console.error("Error downloading PDF:", err)
+                    showError(err, "Failed to download PDF. Please try again.")
+                    }
+                  }}
+                  className="px-6 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                >
+                  Download PDF
+                </button>
+              </div>
               <div className="flex gap-3">
                 {!showRejectForm ? (
                   <>

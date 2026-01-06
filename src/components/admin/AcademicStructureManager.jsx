@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react"
 import { academicAPI, departmentAPI, programAPI } from "../../services/api"
+import { showError, showWarning } from "../../utils/toast"
 
 export default function AcademicStructureManager() {
   const [departments, setDepartments] = useState([])
   const [programs, setPrograms] = useState([])
   const [selectedDept, setSelectedDept] = useState("")
   const [selectedProgram, setSelectedProgram] = useState("")
-  const [selectedYear, setSelectedYear] = useState(null)
-  const [selectedDivision, setSelectedDivision] = useState(null)
-  const [selectedBatch, setSelectedBatch] = useState(null)
+  const [selectedYearId, setSelectedYearId] = useState("")
+  const [selectedDivisionId, setSelectedDivisionId] = useState("")
+  const [selectedBatchId, setSelectedBatchId] = useState("")
   const [years, setYears] = useState([])
   const [divisions, setDivisions] = useState([])
   const [batches, setBatches] = useState([])
@@ -39,16 +40,20 @@ export default function AcademicStructureManager() {
   }, [selectedProgram])
 
   useEffect(() => {
-    if (selectedYear) {
-      fetchDivisions(selectedYear._id || selectedYear.id)
+    if (selectedYearId) {
+      fetchDivisions(selectedYearId)
     }
-  }, [selectedYear])
+  }, [selectedYearId])
 
   useEffect(() => {
-    if (selectedDivision) {
-      fetchBatches(selectedDivision._id || selectedDivision.id)
+    if (selectedDivisionId) {
+      fetchBatches(selectedDivisionId)
     }
-  }, [selectedDivision])
+  }, [selectedDivisionId])
+
+  const selectedYear = years.find((y) => (y._id || y.id) === selectedYearId)
+  const selectedDivision = divisions.find((d) => (d._id || d.id) === selectedDivisionId)
+  const selectedBatch = batches.find((b) => (b._id || b.id) === selectedBatchId)
 
   const fetchDepartments = async () => {
     try {
@@ -117,7 +122,7 @@ export default function AcademicStructureManager() {
       await fetchYears()
     } catch (error) {
       console.error("Error saving year:", error)
-      alert(error.error || "Failed to save year")
+      showError(error, "Failed to save year")
     }
   }
 
@@ -136,17 +141,17 @@ export default function AcademicStructureManager() {
     if (!window.confirm("Are you sure you want to delete this year?")) return
     try {
       await academicAPI.deleteYear(id)
-      if (selectedYear?._id === id || selectedYear?.id === id) {
-        setSelectedYear(null)
+      if (selectedYearId === id) {
+        setSelectedYearId("")
+        setSelectedDivisionId("")
+        setSelectedBatchId("")
         setDivisions([])
-        setSelectedDivision(null)
         setBatches([])
-        setSelectedBatch(null)
       }
       await fetchYears()
     } catch (error) {
       console.error("Error deleting year:", error)
-      alert(error.error || "Failed to delete year")
+      showError(error, "Failed to delete year")
     }
   }
 
@@ -168,7 +173,7 @@ export default function AcademicStructureManager() {
       await fetchDivisions(selectedYear._id || selectedYear.id)
     } catch (error) {
       console.error("Error saving division:", error)
-      alert(error.error || "Failed to save division")
+      showError(error, "Failed to save division")
     }
   }
 
@@ -185,24 +190,35 @@ export default function AcademicStructureManager() {
     if (!window.confirm("Are you sure you want to delete this division?")) return
     try {
       await academicAPI.deleteDivision(id)
-      if (selectedDivision?._id === id || selectedDivision?.id === id) {
-        setSelectedDivision(null)
+      if (selectedDivisionId === id) {
+        setSelectedDivisionId("")
+        setSelectedBatchId("")
         setBatches([])
-        setSelectedBatch(null)
       }
-      await fetchDivisions(selectedYear._id || selectedYear.id)
+      if (selectedYearId) {
+        await fetchDivisions(selectedYearId)
+      }
     } catch (error) {
       console.error("Error deleting division:", error)
-      alert(error.error || "Failed to delete division")
+      showError(error, "Failed to delete division")
     }
   }
 
   const handleCreateBatch = async (e) => {
     e.preventDefault()
     try {
+      if (!selectedDivisionId) {
+        showWarning("Please select a division first")
+        return
+      }
+      const name = (batchForm.name || "").trim().toUpperCase()
+      if (!name) {
+        showWarning("Batch name is required")
+        return
+      }
       const submitData = {
-        name: batchForm.name,
-        division: selectedDivision._id || selectedDivision.id,
+        name,
+        division: selectedDivisionId,
       }
       if (editingBatchId) {
         await academicAPI.updateBatch(editingBatchId, submitData)
@@ -212,10 +228,10 @@ export default function AcademicStructureManager() {
       setShowBatchForm(false)
       setBatchForm({ name: "" })
       setEditingBatchId(null)
-      await fetchBatches(selectedDivision._id || selectedDivision.id)
+      await fetchBatches(selectedDivisionId)
     } catch (error) {
       console.error("Error saving batch:", error)
-      alert(error.error || "Failed to save batch")
+      showError(error, "Failed to save batch")
     }
   }
 
@@ -231,13 +247,15 @@ export default function AcademicStructureManager() {
     if (!window.confirm("Are you sure you want to delete this batch?")) return
     try {
       await academicAPI.deleteBatch(id)
-      if (selectedBatch?._id === id || selectedBatch?.id === id) {
-        setSelectedBatch(null)
+      if (selectedBatchId === id) {
+        setSelectedBatchId("")
       }
-      await fetchBatches(selectedDivision._id || selectedDivision.id)
+      if (selectedDivisionId) {
+        await fetchBatches(selectedDivisionId)
+      }
     } catch (error) {
       console.error("Error deleting batch:", error)
-      alert(error.error || "Failed to delete batch")
+      showError(error, "Failed to delete batch")
     }
   }
 
@@ -270,7 +288,12 @@ export default function AcademicStructureManager() {
             onChange={(e) => {
               setSelectedDept(e.target.value)
               setSelectedProgram("")
+              setSelectedYearId("")
+              setSelectedDivisionId("")
+              setSelectedBatchId("")
               setYears([])
+              setDivisions([])
+              setBatches([])
             }}
             className="input-base"
           >
@@ -290,6 +313,11 @@ export default function AcademicStructureManager() {
             onChange={(e) => {
               setSelectedProgram(e.target.value)
               setYears([])
+              setSelectedYearId("")
+              setSelectedDivisionId("")
+              setSelectedBatchId("")
+              setDivisions([])
+              setBatches([])
             }}
             className="input-base"
             disabled={!selectedDept}
@@ -383,54 +411,54 @@ export default function AcademicStructureManager() {
             {years.length === 0 ? (
               <div className="col-span-full text-center py-4 text-gray-600 text-sm">No years found</div>
             ) : (
-              years.map((year) => (
-                <div
-                  key={year._id || year.id}
-                  className={`p-3 border rounded-lg transition cursor-pointer ${
-                    selectedYear?._id === year._id || selectedYear?.id === year.id
-                      ? "bg-black text-white border-black"
-                      : "bg-gray-50 border-gray-200 hover:shadow-sm"
-                  }`}
-                  onClick={() => {
-                    setSelectedYear(year)
-                    setSelectedDivision(null)
-                    setSelectedBatch(null)
-                    setDivisions([])
-                    setBatches([])
-                  }}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className={`font-medium ${selectedYear?._id === year._id || selectedYear?.id === year.id ? "text-white" : "text-gray-900"}`}>
-                        {year.name}
-                      </p>
-                      <p className={`text-xs mt-1 ${selectedYear?._id === year._id || selectedYear?.id === year.id ? "text-gray-200" : "text-gray-600"}`}>
-                        Code: {year.code}
-                      </p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditYear(year)
-                        }}
-                        className={`px-2 py-1 rounded text-xs ${selectedYear?._id === year._id || selectedYear?.id === year.id ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteYear(year._id || year.id)
-                        }}
-                        className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
-                      >
-                        Del
-                      </button>
+              years.map((year) => {
+                const yearId = year._id || year.id
+                const isSelected = selectedYearId === yearId
+                return (
+                  <div
+                    key={yearId}
+                    className={`p-3 border rounded-lg transition cursor-pointer ${
+                      isSelected ? "bg-white border-2 border-black shadow-sm" : "bg-white border-gray-200 hover:shadow-sm"
+                    }`}
+                    onClick={() => {
+                      setSelectedYearId(yearId)
+                      setSelectedDivisionId("")
+                      setSelectedBatchId("")
+                      setDivisions([])
+                      setBatches([])
+                    }}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900">{year.name}</p>
+                        <p className="text-xs mt-1 text-gray-600">Code: {year.code}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditYear(year)
+                          }}
+                          className={`px-2 py-1 rounded text-xs ${
+                            isSelected ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteYear(yearId)
+                          }}
+                          className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
+                        >
+                          Del
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
@@ -502,52 +530,52 @@ export default function AcademicStructureManager() {
             {divisions.length === 0 ? (
               <div className="col-span-full text-center py-4 text-gray-600 text-sm">No divisions found</div>
             ) : (
-              divisions.map((div) => (
-                <div
-                  key={div._id || div.id}
-                  className={`p-3 border rounded-xl transition cursor-pointer ${
-                    selectedDivision?._id === div._id || selectedDivision?.id === div.id
-                      ? "bg-black text-white border-black"
-                      : "bg-gray-50 border-gray-200 hover:shadow-sm"
-                  }`}
-                  onClick={() => {
-                    setSelectedDivision(div)
-                    setSelectedBatch(null)
-                    setBatches([])
-                  }}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className={`font-medium ${selectedDivision?._id === div._id || selectedDivision?.id === div.id ? "text-white" : "text-gray-900"}`}>
-                        {div.name}
-                      </p>
-                      <p className={`text-xs mt-1 ${selectedDivision?._id === div._id || selectedDivision?.id === div.id ? "text-gray-200" : "text-gray-600"}`}>
-                        Code: {div.code}
-                      </p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditDivision(div)
-                        }}
-                        className={`px-2 py-1 rounded text-xs ${selectedDivision?._id === div._id || selectedDivision?.id === div.id ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteDivision(div._id || div.id)
-                        }}
-                        className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
-                      >
-                        Del
-                      </button>
+              divisions.map((div) => {
+                const divId = div._id || div.id
+                const isSelected = selectedDivisionId === divId
+                return (
+                  <div
+                    key={divId}
+                    className={`p-3 border rounded-lg transition cursor-pointer ${
+                      isSelected ? "bg-white border-2 border-black shadow-sm" : "bg-white border-gray-200 hover:shadow-sm"
+                    }`}
+                    onClick={() => {
+                      setSelectedDivisionId(divId)
+                      setSelectedBatchId("")
+                      setBatches([])
+                    }}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900">{div.name}</p>
+                        <p className="text-xs mt-1 text-gray-600">Code: {div.code}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditDivision(div)
+                          }}
+                          className={`px-2 py-1 rounded text-xs ${
+                            isSelected ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteDivision(divId)
+                          }}
+                          className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
+                        >
+                          Del
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
@@ -583,7 +611,7 @@ export default function AcademicStructureManager() {
               </h5>
               <input
                 type="text"
-                placeholder="Batch Number"
+                placeholder="Batch Name"
                 value={batchForm.name}
                 onChange={(e) => setBatchForm({ ...batchForm, name: e.target.value })}
                 className="input-base mb-3"
@@ -612,43 +640,45 @@ export default function AcademicStructureManager() {
             {batches.length === 0 ? (
               <div className="col-span-full text-center py-4 text-gray-600 text-sm">No batches found</div>
             ) : (
-              batches.map((batch) => (
-                <div
-                  key={batch._id || batch.id}
-                  className={`p-3 border rounded-lg transition ${
-                    selectedBatch?._id === batch._id || selectedBatch?.id === batch.id
-                      ? "bg-black text-white border-black"
-                      : "bg-gray-50 border-gray-200 hover:shadow-sm"
-                  }`}
-                  onClick={() => setSelectedBatch(batch)}
-                >
-                  <div className="flex justify-between items-center">
-                    <p className={`font-medium ${selectedBatch?._id === batch._id || selectedBatch?.id === batch.id ? "text-white" : "text-gray-900"}`}>
-                      Batch {batch.name}
-                    </p>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditBatch(batch)
-                        }}
-                        className={`px-2 py-1 rounded text-xs ${selectedBatch?._id === batch._id || selectedBatch?.id === batch.id ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteBatch(batch._id || batch.id)
-                        }}
-                        className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
-                      >
-                        Del
-                      </button>
+              batches.map((batch) => {
+                const batchId = batch._id || batch.id
+                const isSelected = selectedBatchId === batchId
+                return (
+                  <div
+                    key={batchId}
+                    className={`p-3 border rounded-lg transition cursor-pointer ${
+                      isSelected ? "bg-white border-2 border-black shadow-sm" : "bg-white border-gray-200 hover:shadow-sm"
+                    }`}
+                    onClick={() => setSelectedBatchId(batchId)}
+                  >
+                    <div className="flex justify-between items-center">
+                      <p className="font-medium text-gray-900">Batch {batch.name}</p>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditBatch(batch)
+                          }}
+                          className={`px-2 py-1 rounded text-xs ${
+                            isSelected ? "bg-white text-black hover:bg-gray-100" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteBatch(batchId)
+                          }}
+                          className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"
+                        >
+                          Del
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
@@ -656,4 +686,3 @@ export default function AcademicStructureManager() {
     </div>
   )
 }
-

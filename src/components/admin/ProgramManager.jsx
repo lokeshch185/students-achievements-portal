@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { programAPI, departmentAPI } from "../../services/api"
+import { showError } from "../../utils/toast"
 
 export default function ProgramManager() {
   const [programs, setPrograms] = useState([])
@@ -56,7 +57,7 @@ export default function ProgramManager() {
       await fetchPrograms()
     } catch (error) {
       console.error("Error saving program:", error)
-      alert(error.error || "Failed to save program")
+      showError(error, "Failed to save program")
     }
   }
 
@@ -79,7 +80,7 @@ export default function ProgramManager() {
       await fetchPrograms()
     } catch (error) {
       console.error("Error deleting program:", error)
-      alert(error.error || "Failed to delete program")
+      showError(error, "Failed to delete program")
     }
   }
 
@@ -110,17 +111,14 @@ export default function ProgramManager() {
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             {editingId ? "Edit Program" : "Add New Program"}
           </h3>
-          <select
+          <input
+            type="text"
+            placeholder="Program Code"
             value={formData.code}
             onChange={(e) => setFormData({ ...formData, code: e.target.value })}
             className="input-base"
             required
-            disabled={!!editingId}
-          >
-            <option value="">Select Program Type</option>
-            <option value="ug">Undergraduate (UG)</option>
-            <option value="pg">Postgraduate (PG)</option>
-          </select>
+          />
           <input
             type="text"
             placeholder="Program Name"

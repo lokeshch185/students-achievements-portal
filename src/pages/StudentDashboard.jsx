@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import { achievementAPI, categoryAPI } from "../services/api"
+import { showWarning } from "../utils/toast"
 import AchievementFormModal from "../components/student/AchievementForm"
+import StudentProfile from "../components/student/StudentProfile"
 import FilteredAchievements from "../components/student/FilteredAchievements"
 import AchievementStats from "../components/student/AchievementStats"
 import AdvancedPagination from "../components/AdvancedPagination"
@@ -59,8 +61,8 @@ export default function StudentDashboard() {
   }
 
   const handleEditAchievement = (achievement) => {
-    if (achievement.status !== "pending") {
-      alert("You can only edit pending achievements")
+    if (!["pending", "rejected"].includes(achievement.status)) {
+      showWarning("You can only edit pending or rejected achievements")
       return
     }
     setEditingAchievement(achievement)
@@ -75,6 +77,7 @@ export default function StudentDashboard() {
   const tabs = [
     { id: "list", label: "My Achievements", icon: "🏆" },
     { id: "add", label: "Add Achievement", icon: "➕" },
+    { id: "profile", label: "Profile", icon: "👤" },
   ]
 
   return (
@@ -144,6 +147,7 @@ export default function StudentDashboard() {
             onCancel={handleCancelEdit}
           />
         )}
+        {activeTab === "profile" && <StudentProfile />}
       </div>
     </div>
   )

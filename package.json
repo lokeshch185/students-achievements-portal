@@ -19,6 +19,7 @@
     "react-konva": "^19.2.0",
     "react-pdf": "^10.2.0",
     "react-router-dom": "^7.9.5",
+    "react-toastify": "^11.0.5",
     "recharts": "^3.3.0",
     "simple-css-reset": "^3.0.0"
   },

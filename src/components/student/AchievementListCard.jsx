@@ -1,5 +1,7 @@
 
 
+import { showError } from "../../utils/toast"
+
 export default function AchievementListCard({ achievement, onEdit }) {
   const getStatusColor = (status) => {
     switch (status) {
@@ -68,7 +70,7 @@ export default function AchievementListCard({ achievement, onEdit }) {
       document.body.removeChild(a)
     } catch (err) {
       console.error("Error downloading certificate:", err)
-      alert("Failed to download certificate. Please try again.")
+      showError(err, "Failed to download certificate. Please try again.")
     }
   }
 

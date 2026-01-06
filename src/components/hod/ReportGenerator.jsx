@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { achievementAPI } from "../../services/api"
+import { showError, showInfo, showSuccess, showWarning } from "../../utils/toast"
 
 export default function ReportGenerator() {
   const [reportType, setReportType] = useState("monthly")
@@ -11,11 +12,11 @@ export default function ReportGenerator() {
   const handleGenerateReport = async () => {
     if (reportType === "monthly" || reportType === "semester") {
       if (!startDate || !endDate) {
-        alert("Please select start and end dates")
+        showWarning("Please select start and end dates")
         return
       }
       if (new Date(startDate) > new Date(endDate)) {
-        alert("Start date must be before end date")
+        showWarning("Start date must be before end date")
         return
       }
     }
@@ -32,7 +33,7 @@ export default function ReportGenerator() {
       const achievements = result.data || result || []
 
       if (achievements.length === 0) {
-        alert("No data available for the selected criteria")
+        showInfo("No data available for the selected criteria")
         setGenerating(false)
         return
       }
@@ -44,11 +45,12 @@ export default function ReportGenerator() {
         generateExcel(achievements)
       } else {
         // PDF generation would typically be done on the backend
-        alert("PDF generation will be available soon. Please use CSV or Excel format.")
+        showInfo("PDF generation will be available soon. Please use CSV or Excel format.")
       }
+      showSuccess("Report download started")
     } catch (error) {
       console.error("Error generating report:", error)
-      alert("Failed to generate report. Please try again.")
+      showError(error, "Failed to generate report. Please try again.")
     } finally {
       setGenerating(false)
     }

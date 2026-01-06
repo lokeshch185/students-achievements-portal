@@ -1,9 +1,12 @@
 
 
 import { useState, useEffect } from "react"
-import { categoryAPI } from "../../services/api"
+import { categoryAPI, userAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
+import { showWarning } from "../../utils/toast"
 
 export default function AchievementForm({ onSubmit, achievement = null, onCancel }) {
+  const { user } = useAuth()
   const [formData, setFormData] = useState({
     title: "",
     category: "",
@@ -11,6 +14,8 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
     date: "",
     certificate: null,
     photo: null,
+    type: "solo",
+    participants: [],
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -19,6 +24,9 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
   const [photoPreview, setPhotoPreview] = useState(null)
   const [categories, setCategories] = useState(null)
   const isEditing = !!achievement
+  const [studentSearch, setStudentSearch] = useState("")
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -40,6 +48,8 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
         date: dateStr,
         certificate: null, // Don't pre-fill files
         photo: null,
+        type: achievement.type || "solo",
+        participants: achievement.participants || [],
       })
     }
   }, [achievement])
@@ -61,9 +71,9 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
       const maxSize = 500 * 1024; // 500 KB
 
       if (file.size > maxSize) {
-        alert("File size must be under 500 KB");
-        e.target.value = "";
-        return;
+        showWarning("File size must be under 500 KB")
+        e.target.value = ""
+        return
       }
 
       if (name === "certificate") {
@@ -108,7 +118,58 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
       setError("Please select a category")
       return false
     }
+    if (formData.type === "group" && formData.participants.length === 0) {
+      setError("Please add at least one other student for a group achievement")
+      return false
+    }
     return true
+  }
+
+  const handleSearchStudents = async (query) => {
+    setStudentSearch(query)
+    if (!query.trim()) {
+      setSearchResults([])
+      return
+    }
+    setSearchLoading(true)
+    try {
+      const params = {
+        role: "student",
+        search: query,
+      }
+      // Prefer same department/year/division as current student
+      if (user?.department?._id) params.department = user.department._id
+      if (user?.year?._id) params.year = user.year._id
+      if (user?.division?._id) params.division = user.division._id
+
+      const response = await userAPI.getUsers(params)
+      const data = response.data || []
+      // Exclude current user
+      const filtered = data.filter((u) => u._id !== user?._id)
+      setSearchResults(filtered)
+    } catch (err) {
+      console.error("Error searching students:", err)
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  const handleAddParticipant = (student) => {
+    setFormData((prev) => {
+      const exists = prev.participants?.some((p) => (p._id || p.id) === (student._id || student.id))
+      if (exists) return prev
+      return {
+        ...prev,
+        participants: [...(prev.participants || []), student],
+      }
+    })
+  }
+
+  const handleRemoveParticipant = (id) => {
+    setFormData((prev) => ({
+      ...prev,
+      participants: (prev.participants || []).filter((p) => (p._id || p.id) !== id),
+    }))
   }
 
   const handleSubmit = async (e) => {
@@ -130,11 +191,14 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
       }
 
       // Prepare achievement data
+      const participantIds = (formData.participants || []).map((p) => p._id || p.id)
       const achievementData = {
         title: formData.title,
         category: formData.category,
         description: formData.description,
         date: formData.date,
+        type: formData.type,
+        participants: participantIds,
       }
 
       await onSubmit(achievementData, files, achievement?._id || achievement?.id)
@@ -178,6 +242,32 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
           Achievement {isEditing ? "updated" : "added"} successfully! {!isEditing && "It is now pending verification."}
         </div>
       )}
+
+      {/* Solo / Group toggle */}
+      <div>
+        <label className="block text-gray-700 text-sm font-medium mb-2">Achievement Type</label>
+        <div className="flex gap-3">
+          {["solo", "group"].map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() =>
+                setFormData((prev) => ({
+                  ...prev,
+                  type,
+                }))
+              }
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
+                formData.type === type
+                  ? "bg-black text-white border-black"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              {type === "solo" ? "Solo" : "Group"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="block text-gray-700 text-sm font-medium mb-2">Achievement Title</label>
@@ -247,6 +337,64 @@ export default function AchievementForm({ onSubmit, achievement = null, onCancel
           required
         />
       </div>
+
+      {/* Group participants selection */}
+      {formData.type === "group" && (
+        <div className="space-y-3">
+          <label className="block text-gray-700 text-sm font-medium">Group Members</label>
+          <p className="text-xs text-gray-500 mb-1">
+            Search and add other students from your class / department who are part of this achievement.
+          </p>
+          <input
+            type="text"
+            value={studentSearch}
+            onChange={(e) => handleSearchStudents(e.target.value)}
+            placeholder="Search by name or email..."
+            className="input-base"
+          />
+          {studentSearch && (
+            <div className="mt-2 border border-gray-200 rounded-lg max-h-48 overflow-y-auto bg-white">
+              {searchLoading ? (
+                <div className="p-3 text-sm text-gray-500">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="p-3 text-sm text-gray-500">No students found</div>
+              ) : (
+                searchResults.map((s) => (
+                  <button
+                    key={s._id}
+                    type="button"
+                    onClick={() => handleAddParticipant(s)}
+                    className="w-full flex justify-between items-center px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-b-0 border-gray-100"
+                  >
+                    <span className="text-gray-900">{s.name}</span>
+                    <span className="text-gray-500 text-xs">{s.rollNo || s.email}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {formData.participants && formData.participants.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {formData.participants.map((p) => (
+                <span
+                  key={p._id || p.id}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 text-gray-800 text-xs border border-gray-300"
+                >
+                  <span>{p.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveParticipant(p._id || p.id)}
+                    className="text-gray-500 hover:text-black"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <label className="block text-gray-700 text-sm font-medium mb-2">
