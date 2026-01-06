@@ -204,12 +204,26 @@ exports.getBatch = asyncHandler(async (req, res) => {
 })
 
 exports.createBatch = asyncHandler(async (req, res) => {
-  const batch = await Batch.create(req.body)
+  if (req.body.name) {
+    req.body.name = req.body.name.trim().toUpperCase()
+  }
+  try {
+    console.log(req.body)
+    const batch = await Batch.create(req.body)
 
-  res.status(201).json({
-    success: true,
-    data: batch,
-  })
+    res.status(201).json({
+      success: true,
+      data: batch,
+    })
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        error: "Batch name already exists for this division",
+      })
+    }
+    throw err
+  }
 })
 
 exports.updateBatch = asyncHandler(async (req, res) => {
@@ -220,6 +234,10 @@ exports.updateBatch = asyncHandler(async (req, res) => {
       success: false,
       error: "Batch not found",
     })
+  }
+
+  if (req.body.name) {
+    req.body.name = req.body.name.trim().toUpperCase()
   }
 
   batch = await Batch.findByIdAndUpdate(req.params.id, req.body, {

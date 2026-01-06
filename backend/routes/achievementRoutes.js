@@ -8,6 +8,7 @@ const {
   verifyAchievement,
   rejectAchievement,
   deleteAchievement,
+  downloadAchievementPdf,
 } = require("../controllers/achievementController")
 const { protect } = require("../middleware/auth")
 const { authorize } = require("../middleware/authorize")
@@ -26,6 +27,7 @@ router
 
 router.put("/:id/verify", protect, authorize("advisor", "hod"), verifyAchievement)
 router.put("/:id/reject", protect, authorize("advisor", "hod"), rejectAchievement)
+router.get("/:id/pdf", protect, authorize("hod", "admin"), downloadAchievementPdf)
 
 module.exports = router
 

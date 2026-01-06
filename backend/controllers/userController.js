@@ -1,5 +1,8 @@
 const User = require("../models/User")
 const { asyncHandler } = require("../middleware/errorHandler")
+const path = require("path")
+const fs = require("fs")
+const csv = require("csv-parse/sync")
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -151,6 +154,113 @@ exports.deleteUser = asyncHandler(async (req, res) => {
   })
 })
 
+// @desc    Bulk create student users from CSV
+// @route   POST /api/users/bulk
+// @access  Private/Admin
+exports.bulkCreateStudents = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      error: "CSV file is required",
+    })
+  }
+
+  const filePath = req.file.path
+  let records = []
+  try {
+    const content = fs.readFileSync(filePath, "utf8")
+    records = csv.parse(content, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    })
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      error: "Failed to parse CSV file",
+    })
+  } finally {
+    // Clean up uploaded file
+    fs.unlink(filePath, () => {})
+  }
+
+  const Department = require("../models/Department")
+  const Program = require("../models/Program")
+  const Year = require("../models/Year")
+  const Division = require("../models/Division")
+  const Batch = require("../models/Batch")
+
+  const results = {
+    total: records.length,
+    successCount: 0,
+    failureCount: 0,
+    errors: [],
+  }
+
+  for (const [index, row] of records.entries()) {
+    try {
+      const {
+        name,
+        email,
+        password,
+        rollNo,
+        departmentCode,
+        programCode,
+        yearCode,
+        divisionCode,
+        batchCode,
+      } = row
+
+      if (!name || !email || !password) {
+        throw new Error("Missing required fields: name, email, password")
+      }
+
+      // Resolve academic references by code
+      const department = departmentCode
+        ? await Department.findOne({ code: departmentCode.toLowerCase() })
+        : null
+      const program = programCode
+        ? await Program.findOne({ code: programCode.toLowerCase() })
+        : null
+      const year = yearCode
+        ? await Year.findOne({ code: yearCode.toLowerCase() })
+        : null
+      const division = divisionCode
+        ? await Division.findOne({ code: divisionCode.toUpperCase() })
+        : null
+      const batch = batchCode
+        ? await Batch.findOne({ number: batchCode, division: division?._id })
+        : null
+
+      const userData = {
+        name,
+        email,
+        password,
+        role: "student",
+        rollNo: rollNo || undefined,
+        department: department?._id,
+        program: program?._id,
+        year: year?._id,
+        division: division?._id,
+        batch: batch?._id,
+      }
+
+      await User.create(userData)
+      results.successCount += 1
+    } catch (err) {
+      results.failureCount += 1
+      results.errors.push({
+        row: index + 2, // account for header row
+        message: err.message,
+      })
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    data: results,
+  })
+})
 // @desc    Assign advisor to divisions
 // @route   PUT /api/users/:id/assign
 // @access  Private/Admin
